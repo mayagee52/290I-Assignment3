@@ -1,7 +1,5 @@
-from fastapi import FastAPI, File, UploadFile
-from typing_extensions import Annotated
-import uvicorn
-from utils import *
+from fastapi import FastAPI, UploadFile, File
+import uvicorn, json
 from dijkstra import dijkstra
 
 # create FastAPI app
@@ -74,6 +72,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
 
     
+
 
 
 
