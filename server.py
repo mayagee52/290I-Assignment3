@@ -13,19 +13,26 @@ async def root():
 async def create_upload_file(file: UploadFile = File(...)):
     global active_graph
     try:
-        contents = await file.read()
-        data = json.loads(contents.decode("utf-8"))
-
+        raw = await file.read()
+        data = json.loads(raw.decode("utf-8"))
         from graph import Graph
         g = Graph()
-        for node, neighbors in data.items():
-            for neighbor, weight in neighbors.items():
-                g.add_edge(str(node), str(neighbor), float(weight))
+        if isinstance(data, list):
+            for e in data:
+                u = str(e["source"]); v = str(e["target"]); w = float(e["weight"])
+                g.add_edge(u, v, w)
+                if e.get("bidirectional"):
+                    g.add_edge(v, u, w)
+        elif isinstance(data, dict):
+            for u, nbrs in data.items():
+                for v, w in nbrs.items():
+                    g.add_edge(str(u), str(v), float(w))
+        else:
+            return {"Upload Error": "Invalid JSON"}
         active_graph = g
-
         return {"Upload Success": file.filename}
     except Exception as e:
-        return {"Upload Error": repr(e)}
+        return {"Upload Error": str(e)}
 
 
 @app.get("/solve_shortest_path/start_node_id={start_node_id}&end_node_id={end_node_id}")
@@ -57,6 +64,7 @@ async def get_shortest_path(start_node_id: str, end_node_id: str):
 if __name__ == "__main__":
     print("Server is running at http://localhost:8080")
     uvicorn.run(app, host="0.0.0.0", port=8080)
+
 
 
 
