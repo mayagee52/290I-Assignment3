@@ -14,27 +14,38 @@ active_graph = None
 async def root():
     return {"message": "Welcome to the Shortest Path Solver!"}
 
-
 @app.post("/upload_graph_json/")
-async def create_upload_file(file: UploadFile):
+async def create_upload_file(file: UploadFile = File(...)):
     import json
     global active_graph
     if not file.filename.lower().endswith(".json"):
         return {"Upload Error": "Invalid file type"}
     try:
-        contents = await file.read()
-        data = json.loads(contents)
+        raw = await file.read()
+        data = json.loads(raw.decode("utf-8"))
 
-        graph = {}
-        for edge in data:
-            u, v, w = edge["source"], edge["target"], edge["weight"]
-            graph.setdefault(u, {})[v] = w
-            if edge.get("bidirectional"):
-                graph.setdefault(v, {})[u] = w
-        active_graph = graph
+        # Handle both adjacency-dict and edge-list formats
+        if isinstance(data, dict):
+            active_graph = {
+                str(u): {str(v): float(w) for v, w in nbrs.items()}
+                for u, nbrs in data.items()
+            }
+        elif isinstance(data, list):
+            graph = {}
+            for edge in data:
+                u = str(edge["source"])
+                v = str(edge["target"])
+                w = float(edge["weight"])
+                graph.setdefault(u, {})[v] = w
+                if edge.get("bidirectional"):
+                    graph.setdefault(v, {})[u] = w
+            active_graph = graph
+        else:
+            return {"Upload Error": "Invalid file type"}
 
         return {"Upload Success": file.filename}
-    except Exception:
+    except Exception as e:
+        print("Upload error:", e)  # shows what went wrong if you test locally
         return {"Upload Error": "Invalid file type"}
 
 
@@ -63,4 +74,5 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
 
     
+
 
