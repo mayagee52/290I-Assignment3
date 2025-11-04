@@ -14,6 +14,7 @@ active_graph = None
 async def root():
     return {"message": "Welcome to the Shortest Path Solver!"}
 
+
 @app.post("/upload_graph_json/")
 async def create_upload_file(file: UploadFile):
     import json
@@ -22,10 +23,20 @@ async def create_upload_file(file: UploadFile):
         return {"Upload Error": "Invalid file type"}
     try:
         contents = await file.read()
-        active_graph = json.loads(contents)
+        data = json.loads(contents)
+
+        graph = {}
+        for edge in data:
+            u, v, w = edge["source"], edge["target"], edge["weight"]
+            graph.setdefault(u, {})[v] = w
+            if edge.get("bidirectional"):
+                graph.setdefault(v, {})[u] = w
+        active_graph = graph
+
         return {"Upload Success": file.filename}
     except Exception:
         return {"Upload Error": "Invalid file type"}
+
 
 @app.get("/solve_shortest_path/starting_node_id={starting_node_id}&end_node_id={end_node_id}")
 async def get_shortest_path(starting_node_id: str, end_node_id: str):
@@ -52,3 +63,4 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
 
     
+
