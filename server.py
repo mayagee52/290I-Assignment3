@@ -52,33 +52,35 @@ async def get_shortest_path(start_node_id: str, end_node_id: str):
     if start_node_id not in known or end_node_id not in known:
         return {"Solver Error": "Invalid start or end node ID."}
 
+    graph_adj = {
+        str(u): ([(str(v), float(w)) for v, w in nbrs.items()]
+                 if isinstance(nbrs, dict) else nbrs)
+        for u, nbrs in active_graph.items()
+    }
+
     try:
-        graph_adj = {
-            str(u): ([(str(v), float(w)) for v, w in nbrs.items()]
-                     if isinstance(nbrs, dict) else nbrs)
-            for u, nbrs in active_graph.items()
-        }
+        distances, previous = dijkstra(graph_adj, str(start_node_id))
+        path = []
+        cur = str(end_node_id)
+        while cur:
+            path.insert(0, cur)
+            cur = previous.get(cur)
+            if cur == str(start_node_id):
+                path.insert(0, cur)
+                break
 
-        result = dijkstra(graph_adj, str(start_node_id), str(end_node_id))
-
-        if isinstance(result, tuple) and len(result) == 2:
-            a, b = result
-            if isinstance(a, (list, tuple)):
-                path, total_distance = list(map(str, a)), float(b)
-            else:
-                total_distance, path = float(a), list(map(str, b))
-        else:
-            return {"Solver Error": "Unexpected return from dijkstra()."}
-
-        if not path:
+        if not path or path[0] != str(start_node_id):
             return {"shortest_path": None, "total_distance": None}
-        return {"shortest_path": path, "total_distance": total_distance}
 
+        total_distance = distances.get(str(end_node_id))
+        return {"shortest_path": path, "total_distance": total_distance}
     except Exception as e:
         return {"Solver Error": repr(e)}
+
 
 
 if __name__ == "__main__":
     print("Server is running at http://localhost:8080")
     uvicorn.run(app, host="0.0.0.0", port=8080)
+
 
