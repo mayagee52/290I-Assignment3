@@ -59,12 +59,19 @@ async def get_shortest_path(start_node_id: str, end_node_id: str):
 
     s, t = str(start_node_id), str(end_node_id)
 
-    # allow s/t that only appear as targets
-    present = (s in active_graph) or any(s in nbrs for nbrs in active_graph.values())
-    if not present:
-        return {"Solver Error": f"Start node '{s}' not found."}
+    # collect all nodes (sources + targets)
+    all_nodes = set(active_graph.keys()) | {v for nbrs in active_graph.values() for v in nbrs.keys()}
 
-    dist, prev = dijkstra(active_graph, s)  # <-- exactly 2 inputs
+    if s not in all_nodes:
+        return {"Solver Error": f"Start node '{s}' not found."}
+    if t not in all_nodes:
+        return {"Solver Error": f"End node '{t}' not found."}
+
+    try:
+        dist, prev = dijkstra(active_graph, s)  # <-- exactly 2 inputs
+    except Exception as e:
+        # turn internal errors into a structured response instead of a 500
+        return {"Solver Error": f"dijkstra failed: {e!s}"}
 
     # reconstruct path t -> s via prev
     path = []
@@ -75,16 +82,22 @@ async def get_shortest_path(start_node_id: str, end_node_id: str):
             break
         cur = prev.get(cur)
 
+    # unreachable or not connected
     if not path or path[0] != s or path[-1] != t:
         return {"shortest_path": None, "total_distance": None}
 
-    return {"shortest_path": path, "total_distance": dist.get(t)}
+    # also handle 'inf' or missing distance
+    td = dist.get(t)
+    if td is None or (isinstance(td, float) and td == float("inf")):
+        return {"shortest_path": None, "total_distance": None}
 
+    return {"shortest_path": path, "total_distance": td}
 
 
 if __name__ == "__main__":
     print("Server is running at http://localhost:8080")
     uvicorn.run(app, host="0.0.0.0", port=8080)
+
 
 
 
