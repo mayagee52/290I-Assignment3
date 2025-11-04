@@ -11,59 +11,81 @@ async def root():
 
 @app.post("/upload_graph_json/")
 async def create_upload_file(file: UploadFile = File(...)):
+    """
+    Accepts either:
+      - Edge list: [{"source":"u","target":"v","weight":w,"bidirectional":true}, ...]
+      - Adjacency dict: {"u": {"v": w, ...}, ...}
+    Stores an adjacency dict in global `active_graph`.
+    """
+    import json
     global active_graph
-    try:
-        raw = await file.read()
-        data = json.loads(raw.decode("utf-8"))
-        from graph import Graph
-        g = Graph()
-        if isinstance(data, list):
-            for e in data:
-                u = str(e["source"]); v = str(e["target"]); w = float(e["weight"])
-                g.add_edge(u, v, w)
-                if e.get("bidirectional"):
-                    g.add_edge(v, u, w)
-        elif isinstance(data, dict):
-            for u, nbrs in data.items():
-                for v, w in nbrs.items():
-                    g.add_edge(str(u), str(v), float(w))
-        else:
-            return {"Upload Error": "Invalid JSON"}
-        active_graph = g
-        return {"Upload Success": file.filename}
-    except Exception as e:
-        return {"Upload Error": str(e)}
+
+    raw = await file.read()
+    data = json.loads(raw.decode("utf-8"))
+
+    adj = {}
+
+    def add_edge(u, v, w):
+        u = str(u); v = str(v)
+        adj.setdefault(u, {})
+        adj[u][v] = float(w)
+
+    if isinstance(data, list):  # edge list
+        for e in data:
+            add_edge(e["source"], e["target"], e.get("weight", 1.0))
+            if e.get("bidirectional"):
+                add_edge(e["target"], e["source"], e.get("weight", 1.0))
+    elif isinstance(data, dict):  # adjacency dict
+        for u, nbrs in data.items():
+            for v, w in nbrs.items():
+                add_edge(u, v, w)
+    else:
+        return {"Upload Error": "Invalid JSON format (use edge list or adjacency dict)."}
+
+    active_graph = adj
+    # quick node count (include targets-only)
+    nodes = set(adj.keys()) | {v for nbrs in adj.values() for v in nbrs.keys()}
+    return {"Upload Success": file.filename, "num_nodes": len(nodes)}
 
 
 @app.get("/solve_shortest_path/start_node_id={start_node_id}&end_node_id={end_node_id}")
 async def get_shortest_path(start_node_id: str, end_node_id: str):
+    """
+    Runs dijkstra(active_graph, start_node_id) and returns the path + total distance.
+    """
     global active_graph
     if active_graph is None:
         return {"Solver Error": "No active graph, please upload a graph first."}
 
-    try:
-        distances, previous = dijkstra(active_graph, str(start_node_id))
-        path = []
-        cur = str(end_node_id)
-        while cur:
-            path.insert(0, cur)
-            cur = previous.get(cur)
-            if cur == str(start_node_id):
-                path.insert(0, cur)
-                break
+    s, t = str(start_node_id), str(end_node_id)
 
-        if not path or path[0] != str(start_node_id):
-            return {"shortest_path": None, "total_distance": None}
+    # allow s/t that only appear as targets
+    present = (s in active_graph) or any(s in nbrs for nbrs in active_graph.values())
+    if not present:
+        return {"Solver Error": f"Start node '{s}' not found."}
 
-        total_distance = distances.get(str(end_node_id))
-        return {"shortest_path": path, "total_distance": total_distance}
-    except Exception as e:
-        return {"Solver Error": repr(e)}
+    dist, prev = dijkstra(active_graph, s)  # <-- exactly 2 inputs
+
+    # reconstruct path t -> s via prev
+    path = []
+    cur = t
+    while cur is not None:
+        path.insert(0, cur)
+        if cur == s:
+            break
+        cur = prev.get(cur)
+
+    if not path or path[0] != s or path[-1] != t:
+        return {"shortest_path": None, "total_distance": None}
+
+    return {"shortest_path": path, "total_distance": dist.get(t)}
+
 
 
 if __name__ == "__main__":
     print("Server is running at http://localhost:8080")
     uvicorn.run(app, host="0.0.0.0", port=8080)
+
 
 
 
