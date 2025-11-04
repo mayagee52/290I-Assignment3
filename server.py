@@ -18,13 +18,14 @@ async def root():
 async def create_upload_file(file: UploadFile = File(...)):
     import json
     global active_graph
-    if not file.filename.lower().endswith(".json"):
+
+    if not file or not file.filename or not file.filename.lower().endswith(".json"):
         return {"Upload Error": "Invalid file type"}
+
     try:
         raw = await file.read()
         data = json.loads(raw.decode("utf-8"))
 
-        # Handle both adjacency-dict and edge-list formats
         if isinstance(data, dict):
             active_graph = {
                 str(u): {str(v): float(w) for v, w in nbrs.items()}
@@ -33,9 +34,7 @@ async def create_upload_file(file: UploadFile = File(...)):
         elif isinstance(data, list):
             graph = {}
             for edge in data:
-                u = str(edge["source"])
-                v = str(edge["target"])
-                w = float(edge["weight"])
+                u = str(edge["source"]); v = str(edge["target"]); w = float(edge["weight"])
                 graph.setdefault(u, {})[v] = w
                 if edge.get("bidirectional"):
                     graph.setdefault(v, {})[u] = w
@@ -44,8 +43,9 @@ async def create_upload_file(file: UploadFile = File(...)):
             return {"Upload Error": "Invalid file type"}
 
         return {"Upload Success": file.filename}
+
     except Exception as e:
-        print("Upload error:", e)  # shows what went wrong if you test locally
+        print("Upload error:", repr(e)) 
         return {"Upload Error": "Invalid file type"}
 
 
@@ -74,5 +74,6 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)
 
     
+
 
 
